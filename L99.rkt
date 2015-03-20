@@ -15,6 +15,10 @@
       (cons element (make-list (sub1 count) element))
       '()))
 
+(define mapconcat
+  (lambda args
+    (apply append (apply map args))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Working with lists ;;
@@ -72,7 +76,7 @@
 (define (count-elements list)
   (if (null? list)
       0
-      (+ 1 (count-elements (cdr list)))))
+      (add1 (count-elements (cdr list)))))
 
 (check-equal? (count-elements '())
               0)
@@ -320,8 +324,7 @@
 ;; (A A A B B B C C C)
 
 (define (repli-1 lista n)
-  (apply append
-         (map (lambda (e) (make-list n e)) lista)))
+  (mapconcat (lambda (e) (make-list n e)) lista))
 
 (define (repli-2 lista n)
   (define (recur lista count)
@@ -574,11 +577,10 @@
           [(zero? r) '(())]
           [else
            (append
-            (apply append
-                   (map (lambda (perm)
-                          (map (lambda (pos) (insert-at (car lista) perm pos))
-                               (my-range 1 r)))
-                        (rpermutation-1 (sub1 r) (cdr lista))))
+            (mapconcat (lambda (perm)
+                         (map (lambda (pos) (insert-at (car lista) perm pos))
+                              (my-range 1 r)))
+                       (rpermutation-1 (sub1 r) (cdr lista)))
             (rpermutation-1 r (cdr lista)))])))
 
 (define (rpermutation-2 r lista)
@@ -587,12 +589,11 @@
       (cond [(> r n) '()]
             [(zero? r) (list result)]
             [else
-             (apply append
-                    (map (lambda (pos)
-                           (recur (sub1 r)
-                                  (remove-at remain pos)
-                                  (append result (list (list-ref remain (sub1 pos))))))
-                         (my-range 1 n)))])))
+             (mapconcat (lambda (pos)
+                          (recur (sub1 r)
+                                 (remove-at remain pos)
+                                 (append result (list (list-ref remain (sub1 pos))))))
+                        (my-range 1 n))])))
   (recur r lista '()))
 
 (define (permutation lista)
@@ -724,11 +725,10 @@
 (define (group lista sizes)
   (if (null? sizes)
       '(())
-      (apply append
-             (map (lambda (result)
-                    (map (lambda (g) (cons (car result) g))
-                         (group (cadr result) (cdr sizes))))
-                  (group-split lista '() (car sizes))))))
+      (mapconcat (lambda (result)
+                   (map (lambda (g) (cons (car result) g))
+                        (group (cadr result) (cdr sizes))))
+                 (group-split lista '() (car sizes)))))
 
 (check-equal? (group '(1 2 3) '(2 1))
               '(((1 2) (3))
@@ -795,12 +795,9 @@
         (insert (car lista)
                 (group (cdr lista)))))
 
-  ;; flatten
-  (apply append
-         ;; remove car
-         (map cdr
-              (sort (group lista)
-                    (lambda (a b) (< (car a) (car b)))))))
+  (mapconcat cdr
+             (sort (group lista)
+                   (lambda (a b) (< (car a) (car b))))))
 
 (check-equal? (lfsort '((a b c) (d e) (f g h) (d e) (i j k l) (m n) (o)))
               '((o) (i j k l) (a b c) (f g h) (d e) (d e) (m n)))
@@ -1752,7 +1749,7 @@ return (operators . stack)"
     (if (null? parents)
         '()
         (cons (proc parents depth)
-              (mapdown (apply append (map children parents))
+              (mapdown (mapconcat children parents)
                        (add1 depth)))))
   (if (null? tree)
       '()
@@ -1771,7 +1768,7 @@ return (operators . stack)"
   (define (recur nodes count)
     (if (or (null? nodes) (zero? count))
         (map root nodes)
-        (recur (apply append (map children nodes))
+        (recur (mapconcat children nodes)
                (sub1 count))))
   (if (null? tree)
       '()
