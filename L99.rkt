@@ -2349,10 +2349,17 @@ return (operators . stack)"
 ;; internal path length of 9. Write a predicate ipl(Tree,IPL) for the
 ;; flow pattern (+,-).
 
+(define (ipl mtree)
+  (sum (map (compose1 add1 ipl) (mchildren mtree))))
 
-
-
-
+(check-equal? (ipl '(a b c))
+              2)
+(check-equal? (ipl '(a))
+              0)
+(check-equal? (ipl '(a (b e f g) h))
+              5)
+(check-equal? (ipl '(a (b (e f) (g h)) j))
+              6)
 
 
 ;; P72 (*) Construct the bottom-up order sequence of the tree nodes
@@ -2362,7 +2369,7 @@ return (operators . stack)"
 ;; should be a Prolog list. What happens if you run your predicate
 ;; backwords?
 
-
+;;;; TODO: what does it mean?
 
 
 
@@ -2400,11 +2407,32 @@ return (operators . stack)"
 ;; Given the list LTL, construct the Prolog tree T. Use difference
 ;; lists.
 
+(define (join delimiter strs)
+  (cond [(null? strs) ""]
+        [(null? (cdr strs)) (car strs)]
+        [else
+         (let ([tails
+                (map (lambda (str) (string-append delimiter str))
+                     (cdr strs))])
+           (apply string-append (cons (car strs) tails)))]))
 
+(check-equal? (join "," '("hello" "world"))
+              "hello,world")
+(check-equal? (join "," '("world"))
+              "world")
+(check-equal? (join "," '())
+              "")
 
+;; Lisp-like -> Prolog-like representation
+(define (ltl->ptl tree)
+  (string-append "t("
+                 (symbol->string (if (pair? tree) (root tree) tree))
+                 ",[" (join "," (map ltl->ptl (mchildren tree))) "])"))
 
-
-
+(check-equal? (ltl->ptl '(a b c d))
+              "t(a,[t(b,[]),t(c,[]),t(d,[])])")
+(check-equal? (ltl->ptl '(a))
+              "t(a,[])")
 
 
 ;;;;;;;;;;;;
@@ -2512,12 +2540,11 @@ return (operators . stack)"
 ;; multi-graphs, where more than one edge (or arc) are allowed between
 ;; two given nodes.
 
-
-
-
-
-
-
+(define (neighbors node graph)
+  (let ([relation (assoc node graph)])
+    (if relation
+        (cdr relation)
+        '())))
 
 
 ;; P80 (***) Conversions
@@ -2535,16 +2562,27 @@ return (operators . stack)"
 
 
 
-
 ;; P81 (**) Path from one node to another one
 
 ;; Write a predicate path(G,A,B,P) to find an acyclic path P from node
 ;; A to node b in the graph G. The predicate should return all paths
 ;; via backtracking.
 
+(define (paths start end graph)
+  (define (recur node path)
+    (if (equal? node end)
+        (list path)
+        (mapconcat (lambda (node) (recur node (cons node path)))
+                   (filter (lambda (node) (not (member node path)))
+                           (neighbors node graph)))))
+  (map reverse (recur start (list start))))
 
-
-
+(check-equal? (paths 'a 'b '((a c)))
+              '())
+(check-equal? (paths 'a 'b '((a b) (b a)))
+              '((a b)))
+(check-equal? (paths 'a 'b '((a c d) (c b d) (d b)))
+              '((a c b) (a c d b) (a d b)))
 
 
 ;; P82 (*) Cycle from a given node
@@ -2553,13 +2591,40 @@ return (operators . stack)"
 ;; starting at a given node A in the graph G. The predicate should
 ;; return all cycles via backtracking.
 
+(define (explore-cycles node graph path)
+  (if (member node path)
+      (list path)
+      (mapconcat (lambda (neighbor)
+                   (explore-cycles neighbor graph (cons node path)))
+                 (neighbors node graph))))
 
+(check-equal? (explore-cycles 'a '((a c d) (c b d) (d b)) '())
+              '())
+(check-equal? (explore-cycles 'a '((a c) (b a) (c b d) (d a)) '())
+              '((b c a) (d c a)))
 
+(define (visit-cycles cycles visited)
+  (foldl append visited cycles))
 
+(check-equal? (visit-cycles '((a b c) (d e f)) '(1 2 3))
+              '(d e f a b c 1 2 3))
 
+(define (cycles graph)
+  (define (recur graph visited)
+    (let ([graph (filter (lambda (relation) (not (member (car relation) visited))) graph)])
+      (if (null? graph)
+          '()
+          (let* ([node (caar graph)]
+                 [cycles (explore-cycles node graph '())]
+                 [visited (cons node (visit-cycles cycles visited))])
+            (append cycles (recur (cdr graph) visited))))))
 
+  (recur graph '()))
 
-
+(check-equal? (cycles '((a c d) (c b d) (d b)))
+              '())
+(check-equal? (cycles '((a c) (b a) (c b d) (d a)))
+              '((b c a) (d c a)))
 
 ;; P83 (**) Construct all spanning trees
 
