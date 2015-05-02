@@ -2655,12 +2655,69 @@ return (operators . stack)"
 ;; trick. The data of the example graph to the right can be found in
 ;; the file p84.dat.
 
+(define (prim graph)
+  (define (from edge) (car edge))
+  (define (to edge) (cadr edge))
+  (define (weight edge) (caddr edge))
 
+  (define (update-queue queue edges)
+    (foldl (lambda (edge queue)
+             (let ([v (to edge)])
+               (if (or (not (hash-has-key? queue v))
+                       (< (weight edge) (cadr (hash-ref queue v))))
+                   ;; update queue
+                   (hash-set queue v (list (from edge) (weight edge)))
+                   queue)))
+           queue edges))
 
+  (define (filter-out-added-neighbors added u)
+    (filter (lambda (edge) (not (hash-has-key? added (to edge))))
+            (map (lambda (v) (cons u v)) (neighbors u graph))))
 
+  (define (hash->edges h)
+    (map (lambda (item)
+           (let ([to (car item)]
+                 [from (cadr item)]
+                 [weight (caddr item)])
+             (list from to weight)))
+         (hash->list h)))
 
+  (define (find-min-edge queue)
+    (foldl (lambda (edge min-edge)
+             (if (or (null? min-edge)
+                     (< (weight edge) (weight min-edge)))
+                 edge
+                 min-edge))
+           '()
+           (hash->edges queue)))
 
+  (define (generate queue tree)
+    (if (hash-empty? queue)
+        tree
+        (let ([edge (find-min-edge queue)])
+          (generate (update-queue (hash-remove queue (to edge))
+                                  (filter-out-added-neighbors tree (to edge)))
+                    (hash-set tree (to edge) (from edge))))))
 
+  (if (null? graph)
+      (hash)
+      (let ([start (caar graph)])
+        (generate (hash start '(null 0)) (hash)))))
+
+(check-equal? (prim '()) (hash))
+(check-equal? (prim '((a (b 100) (c 1))
+                      (b (a 100) (c 5))
+                      (c (b 5) (a 1))))
+              '#hash((a . null) (b . c) (c . a)))
+(check-equal? (prim '((a (b 5) (d 3))
+                      (b (a 5) (c 2) (e 4))
+                      (c (b 2) (e 6))
+                      (d (a 3) (f 4) (g 3) (e 7))
+                      (e (c 6) (d 7) (b 4) (h 5))
+                      (h (e 5) (g 1))
+                      (g (h 1) (f 4) (d 3))
+                      (f (g 4) (d 4))))
+              '#hash((e . h) (a . null) (b . e) (d . a) (f . d) (c . b) (g . d) (h . g)))
 
 
 ;; P85 (**) Graph isomorphism
@@ -2673,12 +2730,58 @@ return (operators . stack)"
 ;; isomorphic. Hint: Use an open-ended list to represent the function
 ;; f.
 
+(require racket/set)
 
+(define (degree v graph)
+  (length (neighbors v graph)))
 
+(define (map-assoc p pairs)
+  (map (lambda (v) (cdr (assoc v pairs))) p))
 
+(define (rassoc v alist)
+  (findf (lambda (p) (equal? v (cdr p))) alist))
 
+(define (map-rassoc p pairs)
+  (map (lambda (v) (car (rassoc v pairs))) p))
 
+(define (isomorphic? g1 g2)
+  (define (all-mappings s1 s2)
+    (cond [(and (null? s1) (null? s2)) '(())]
+          [(= (length s1) (length s2))
+           (let* ([v1 (car s1)]
+                  [deg (degree v1 g1)])
+             (mapconcat (lambda (v2)
+                          (map (lambda (m) (cons (cons v1 v2) m))
+                               (all-mappings (cdr s1) (remove v2 s2))))
+                        (filter (lambda (v2) (= deg (degree v2 g2))) s2)))]
+          [else '()]))
 
+  (define (all-matched? mapping)
+    (andmap (lambda (pair)
+              (let ([s1 (neighbors (car pair) g1)]
+                    [s2 (neighbors (cdr pair) g2)])
+                (and (set=? (map-assoc s1 mapping) s2)
+                     (set=? s1 (map-rassoc s2 mapping)))))
+            mapping))
+
+  (and (findf all-matched?
+              (all-mappings (map car g1) (map car g2)))
+       #t))
+
+(check-true
+ (isomorphic? '() '()))
+(check-true
+ (isomorphic? '((a))
+              '((1))))
+(check-false
+ (isomorphic? '((a b) (b a))
+              '((1 2) (2 2))))
+(check-true
+ (isomorphic? '((a b) (b c) (c d) (d))
+              '((1 2) (2 3) (3 4) (4))))
+(check-false
+ (isomorphic? '((a b) (b c) (c d) (d))
+              '((1 2) (2 3) (3 4) (5))))
 
 
 ;; P86 (**) Node degree and graph coloration
